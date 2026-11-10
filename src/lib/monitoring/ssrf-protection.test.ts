@@ -112,4 +112,35 @@ describe("SSRF Protection", () => {
 
     await expect(resolvePublicAddress("example.com")).rejects.toThrow("Hostname did not resolve to an IP address");
   });
+
+  it("rejects a hostname that resolves to an invalid IP address", async () => {
+    mocks.lookup.mockResolvedValue([
+      {
+        address: "not-an-ip-address",
+        family: 4,
+      },
+    ]);
+
+    await expect(
+      resolvePublicAddress("example.com")
+    ).rejects.toThrow(
+      "Monitor hostname resolves to a restricted IP address"
+    );
+  });
+
+  it("correctly handles public IPv6 DNS results", async () => {
+    mocks.lookup.mockResolvedValue([
+      {
+        address: "2606:4700:4700::1111",
+        family: 6,
+      },
+    ]);
+
+    const result = await resolvePublicAddress("example.com");
+
+    expect(result).toEqual({
+      address: "2606:4700:4700::1111",
+      family: 6,
+    });
+  });
 });

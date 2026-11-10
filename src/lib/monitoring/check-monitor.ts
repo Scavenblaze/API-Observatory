@@ -58,8 +58,7 @@ export async function checkMonitor({url, method, timeoutMs, expectedStatus, late
 
     const latencyMs = Math.round(performance.now() - startedAt);
 
-    // Do not follow redirects. A redirect could point to a private
-    // address or another destination that has not been validated.
+    // Do not follow redirects. A redirect could point to a private address or another destination that has not been validated.
     if(response.status >= 300 && response.status < 400){
       await response.body?.cancel();
 

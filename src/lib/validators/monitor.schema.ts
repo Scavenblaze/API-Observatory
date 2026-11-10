@@ -4,14 +4,9 @@ export const createMonitorSchema = z.object({
     name: z.string().trim().min(1).max(100),
 
     url: z.url().refine((value) => {
-        try {
-          const parsed = new URL(value);
-
-          return(["http:", "https:"].includes(parsed.protocol) && !parsed.username && !parsed.password);
-        } catch {
-          return false;
-        }
-      }, "URL must use HTTP or HTTPS and must not contain credentials"),
+      const parsed = new URL(value);
+      return(["http:", "https:"].includes(parsed.protocol) && !parsed.username && !parsed.password);
+    }, "URL must use HTTP or HTTPS and must not contain credentials"),
 
     method: z.enum(["GET", "HEAD"]).default("GET"),
 

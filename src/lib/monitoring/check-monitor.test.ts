@@ -74,7 +74,7 @@ describe("Check Monitor", () => {
       success: true,
       errorType: null,
       errorMessage: null,
-      responseSize: 1024
+      responseSize: 1024 
     });
 
     expect(mocks.resolvePublicAddress).toHaveBeenCalledWith("example.com");
@@ -181,5 +181,103 @@ describe("Check Monitor", () => {
     await checkMonitor(input);
 
     expect(mocks.agentClose).toHaveBeenCalledOnce();
+  });
+
+  it("logs an error when closing the HTTP agent fails", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    mocks.agentClose.mockRejectedValue(new Error("Agent Close Failed"));
+    const result = await checkMonitor(input);
+
+    expect(result.success).toBe(true);
+    expect(consoleErrorSpy).toHaveBeenCalledWith("Failed to close monitor HTTP agent:", expect.any(Error));
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("rejects URLs that do not use HTTP or HTTPS", async () => {
+    const result = await checkMonitor({
+      ...input,
+      url: "ftp://example.com"
+    });
+
+    expect(result).toMatchObject({
+      statusCode: null,
+      success: false,
+      errorType: "SSRF_BLOCKED",
+      errorMessage: "Only HTTP and HTTPS URLs without credentials are allowed"
+    });
+
+    expect(mocks.resolvePublicAddress).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects URLs containing credentials", async () => {
+    const result = await checkMonitor({
+      ...input,
+      url: "https://user:password@example.com"
+    });
+
+    expect(result).toMatchObject({
+      statusCode: null,
+      success: false,
+      errorType: "SSRF_BLOCKED",
+      errorMessage: "Only HTTP and HTTPS URLs without credentials are allowed"
+    });
+
+    expect(mocks.resolvePublicAddress).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("uses the validated IP address for both DNS lookup modes", async () => {
+    await checkMonitor(input);
+
+    const options = mocks.agentConstructor.mock.calls[0][0] as {
+      connect: {
+        lookup : (
+          hostname: string,
+          options: number | { all?: boolean },
+          callback: (...args: unknown[]) => void) => void;
+      };
+    };
+
+    const lookup = options.connect.lookup;
+    const allCallback = vi.fn();
+    lookup("example.com", { all: true }, allCallback);
+    expect(allCallback).toHaveBeenCalledWith(null, [
+      {
+        address: "93.184.216.34",
+        family: 4
+      },
+    ]);
+
+    const singleCallback = vi.fn();
+    lookup("example.com", 4, singleCallback);
+    expect(singleCallback).toHaveBeenCalledWith(null, "93.184.216.34", 4);
+  });
+
+  it("returns null response size for an invalid content-length header", async () => {
+    mocks.fetch.mockResolvedValue(mockResponse(200, "invalid"));
+
+    const result = await checkMonitor(input);
+
+    expect(result).toMatchObject({
+      statusCode: 200,
+      success: true,
+      responseSize: null,
+    });
+  });
+
+  it("returns null response size when content-length exceeds the safe integer range", async () => {
+    mocks.fetch.mockResolvedValue(
+      mockResponse(200, "9007199254740992")
+    );
+
+    const result = await checkMonitor(input);
+
+    expect(result).toMatchObject({
+      statusCode: 200,
+      success: true,
+      responseSize: null,
+    });
   });
 });
